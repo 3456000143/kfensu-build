@@ -43,12 +43,12 @@ jobs:
     steps:
       - name: Clone KernelSU
         run: |
-          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git /ksu
-          ls /ksu/kernel
+          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git $HOME/ksu
+          ls $HOME/ksu/kernel
 
       - name: Build kernelsu.ko
         run: |
-          cd /ksu/kernel
+          cd "$HOME"/ksu/kernel
           CONFIG_KSU=m CC=clang make \
             KSU_PACKAGE_NAME="$MANAGER_PACKAGE" \
             KSU_EXPECTED_SIZE="$EXPECTED_SIZE" \
@@ -71,7 +71,7 @@ jobs:
     steps:
       - name: Clone KernelSU
         run: |
-          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git /ksu
+          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git $HOME/ksu
 
       - name: Setup JDK 21
         uses: actions/setup-java@v4
@@ -89,7 +89,7 @@ jobs:
 
       - name: Patch branding
         run: |
-          cd /ksu/manager
+          cd $HOME/ksu/manager
           # 版本号 1.0.0.0（去掉对 git 的依赖）
           sed -i 's/extra\["managerVersionCode"\] = getVersionCode()/extra["managerVersionCode"] = 10000/' build.gradle.kts
           sed -i 's/extra\["managerVersionName"\] = getVersionName()/extra["managerVersionName"] = "'"$MANAGER_VERSION"'"/' build.gradle.kts
@@ -121,7 +121,7 @@ jobs:
 
       - name: Build release APK
         run: |
-          cd /ksu/manager
+          cd $HOME/ksu/manager
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease \
             -PKSU_PACKAGE_NAME="$MANAGER_PACKAGE" \
@@ -130,5 +130,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: manager-apk
-          path: /ksu/manager/app/build/outputs/apk/release/*.apk
+          path: $HOME/ksu/manager/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
