@@ -1,0 +1,134 @@
+name: K FEN SU (clone KernelSU + build)
+
+# 不需要上传源码：直接在 CI 里克隆官方 KernelSU v3.3.1，现场改造后编译
+# 用法：把本文件放到任意 GitHub 仓库的 .github/workflows/ 下 → Actions → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      kmi:
+        description: 'KMI（Android13+内核5.10 选 android13-5.10）'
+        required: true
+        default: 'android13-5.10'
+        type: choice
+        options:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+      ddk_release:
+        description: 'DDK 镜像版本'
+        required: true
+        default: '20260828'
+
+env:
+  KSU_VERSION: 'v3.3.1'
+  MANAGER_PACKAGE: 'com.fenzhi.ksu'
+  MANAGER_NAME: 'K FEN SU'
+  MANAGER_VERSION: '1.0.0.0'
+  # FENZHI 签名证书（debug.keystore / alias androiddev）
+  EXPECTED_SIZE: '886'
+  EXPECTED_HASH: '225839ce5d4328336104ffbafe174588cc13a779e0fad6d4821acb8cee44ee31'
+
+jobs:
+  # ---------------- 1. 内核模块 kernelsu.ko ----------------
+  lkm:
+    name: LKM (${{ inputs.kmi }})
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:${{ inputs.kmi }}-${{ inputs.ddk_release }}
+      options: --privileged
+    steps:
+      - name: Clone KernelSU
+        run: |
+          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git /ksu
+          ls /ksu/kernel
+
+      - name: Build kernelsu.ko
+        run: |
+          cd /ksu/kernel
+          CONFIG_KSU=m CC=clang make \
+            KSU_PACKAGE_NAME="$MANAGER_PACKAGE" \
+            KSU_EXPECTED_SIZE="$EXPECTED_SIZE" \
+            KSU_EXPECTED_HASH="$EXPECTED_HASH"
+          mkdir -p /out
+          cp kernelsu.ko "/out/${{ inputs.kmi }}_kernelsu.ko"
+          llvm-strip -d "/out/${{ inputs.kmi }}_kernelsu.ko" || true
+          ls -la /out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kernelsu-ko-${{ inputs.kmi }}
+          path: /out/*.ko
+          if-no-files-found: error
+
+  # ---------------- 2. 管理器 APK ----------------
+  manager:
+    name: Manager APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone KernelSU
+        run: |
+          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git /ksu
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK 37
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-37.0" "build-tools;37.0.0" || true
+
+      - name: Patch branding
+        run: |
+          cd /ksu/manager
+          # 版本号 1.0.0.0（去掉对 git 的依赖）
+          sed -i 's/extra\["managerVersionCode"\] = getVersionCode()/extra["managerVersionCode"] = 10000/' build.gradle.kts
+          sed -i 's/extra\["managerVersionName"\] = getVersionName()/extra["managerVersionName"] = "'"$MANAGER_VERSION"'"/' build.gradle.kts
+
+          # 图标：删掉自适应图标，用纯 PNG 覆盖
+          rm -f app/src/main/res/mipmap-anydpi/ic_launcher.xml
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p app/src/main/res/mipmap-$d
+          done
+
+          # 关于页加归属声明
+          ABOUT=app/src/main/java/me/weishu/kernelsu/ui/screen/about/AboutScreen.kt
+          python3 - <<'PY'
+          import re
+          p = "app/src/main/java/me/weishu/kernelsu/ui/screen/about/AboutScreen.kt"
+          s = open(p, encoding="utf-8").read()
+          if "FENZHI" not in s:
+              s = s.replace(
+                'val state = AboutUiState(',
+                'val htmlExtra = "<br/><br/>本应用基于开源项目 <b>KernelSU</b>（GPL-3.0）修改，遵循 GPL-3.0 协议开源。<br/>修改者 / 作者：<b>FENZHI</b>"\n'
+                '    val state = AboutUiState(')
+              s = s.replace('links = extractLinks(htmlString),',
+                            'links = extractLinks(htmlString + htmlExtra),')
+              open(p, "w", encoding="utf-8").write(s)
+              print("about patched")
+          else:
+              print("about already patched")
+          PY
+
+      - name: Build release APK
+        run: |
+          cd /ksu/manager
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease \
+            -PKSU_PACKAGE_NAME="$MANAGER_PACKAGE" \
+            -PKSU_NAME="$MANAGER_NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manager-apk
+          path: /ksu/manager/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
