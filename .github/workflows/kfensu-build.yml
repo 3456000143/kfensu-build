@@ -1,7 +1,7 @@
 name: K FEN SU (clone KernelSU + build)
 
-# 不需要上传源码：直接在 CI 里克隆官方 KernelSU v3.3.1，现场改造后编译
-# 用法：把本文件放到任意 GitHub 仓库的 .github/workflows/ 下 → Actions → Run workflow
+# 不需要上传源码：CI 里克隆官方 KernelSU v3.3.1，现场改造后编译
+# Actions → Run workflow
 
 on:
   workflow_dispatch:
@@ -28,7 +28,6 @@ env:
   MANAGER_PACKAGE: 'com.fenzhi.ksu'
   MANAGER_NAME: 'K FEN SU'
   MANAGER_VERSION: '1.0.0.0'
-  # FENZHI 签名证书（debug.keystore / alias androiddev）
   EXPECTED_SIZE: '886'
   EXPECTED_HASH: '225839ce5d4328336104ffbafe174588cc13a779e0fad6d4821acb8cee44ee31'
 
@@ -43,12 +42,12 @@ jobs:
     steps:
       - name: Clone KernelSU
         run: |
-          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git $HOME/ksu
-          ls $HOME/ksu/kernel
+          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git /ksu
+          ls /ksu/kernel
 
       - name: Build kernelsu.ko
         run: |
-          cd "$HOME"/ksu/kernel
+          cd /ksu/kernel
           CONFIG_KSU=m CC=clang make \
             KSU_PACKAGE_NAME="$MANAGER_PACKAGE" \
             KSU_EXPECTED_SIZE="$EXPECTED_SIZE" \
@@ -71,7 +70,8 @@ jobs:
     steps:
       - name: Clone KernelSU
         run: |
-          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git $HOME/ksu
+          git clone --depth 1 -b "$KSU_VERSION" https://github.com/tiann/KernelSU.git "$HOME/ksu"
+          ls "$HOME/ksu/manager"
 
       - name: Setup JDK 21
         uses: actions/setup-java@v4
@@ -79,49 +79,64 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK 37
+      - name: Install Android SDK 37
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-37.0" "build-tools;37.0.0" || true
+          find_sdkmanager() {
+            for p in "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+                     "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" \
+                     "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager; do
+              [ -x "$p" ] && echo "$p" && return 0
+            done
+            return 1
+          }
+          SDKM=$(find_sdkmanager || true)
+          if [ -z "$SDKM" ]; then
+            echo "本地没有 sdkmanager，下载 cmdline-tools..."
+            mkdir -p "$HOME/android-sdk/cmdline-tools"
+            cd /tmp
+            curl -sSLo tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q tools.zip -d /tmp/ct
+            mv /tmp/ct/cmdline-tools "$HOME/android-sdk/cmdline-tools/latest"
+            export ANDROID_HOME="$HOME/android-sdk"
+            export ANDROID_SDK_ROOT="$ANDROID_HOME"
+            SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          echo "sdkmanager: $SDKM"
+          echo "SDK 目录: $ANDROID_HOME"
+          echo "$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" --install "platforms;android-37.0" "build-tools;37.0.0" 2>&1 | tail -5
 
       - name: Patch branding
         run: |
-          cd $HOME/ksu/manager
-          # 版本号 1.0.0.0（去掉对 git 的依赖）
+          cd "$HOME/ksu/manager"
           sed -i 's/extra\["managerVersionCode"\] = getVersionCode()/extra["managerVersionCode"] = 10000/' build.gradle.kts
-          sed -i 's/extra\["managerVersionName"\] = getVersionName()/extra["managerVersionName"] = "'"$MANAGER_VERSION"'"/' build.gradle.kts
+          sed -i "s/extra\[\"managerVersionName\"\] = getVersionName()/extra[\"managerVersionName\"] = \"$MANAGER_VERSION\"/" build.gradle.kts
+          grep -n 'managerVersion' build.gradle.kts
 
-          # 图标：删掉自适应图标，用纯 PNG 覆盖
-          rm -f app/src/main/res/mipmap-anydpi/ic_launcher.xml
-          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-            mkdir -p app/src/main/res/mipmap-$d
-          done
+          # 去掉自适应图标，用纯 PNG（图标在本地已替换过，CI 里保持官方图标亦可）
+          rm -f app/src/main/res/mipmap-anydpi/ic_launcher.xml || true
 
-          # 关于页加归属声明
-          ABOUT=app/src/main/java/me/weishu/kernelsu/ui/screen/about/AboutScreen.kt
-          python3 - <<'PY'
-          import re
-          p = "app/src/main/java/me/weishu/kernelsu/ui/screen/about/AboutScreen.kt"
+          # 关于页加归属 + 作者
+          ABOUT="app/src/main/java/me/weishu/kernelsu/ui/screen/about/AboutScreen.kt"
+          python3 - "$ABOUT" <<'PY'
+          import sys
+          p = sys.argv[1]
           s = open(p, encoding="utf-8").read()
-          if "FENZHI" not in s:
-              s = s.replace(
-                'val state = AboutUiState(',
-                'val htmlExtra = "<br/><br/>本应用基于开源项目 <b>KernelSU</b>（GPL-3.0）修改，遵循 GPL-3.0 协议开源。<br/>修改者 / 作者：<b>FENZHI</b>"\n'
-                '    val state = AboutUiState(')
-              s = s.replace('links = extractLinks(htmlString),',
-                            'links = extractLinks(htmlString + htmlExtra),')
-              open(p, "w", encoding="utf-8").write(s)
-              print("about patched")
-          else:
-              print("about already patched")
+          if "FENZHI" in s:
+              print("already patched"); sys.exit(0)
+          extra = ('+ "<br/><br/>本应用基于开源项目 <b>KernelSU</b>（GPL-3.0）修改，'
+                   '遵循 GPL-3.0 协议开源。<br/>修改者 / 作者：<b>FENZHI</b>"')
+          s = s.replace('links = extractLinks(htmlString),',
+                        'links = extractLinks(htmlString' + extra + '),')
+          open(p, "w", encoding="utf-8").write(s)
+          print("about patched")
           PY
 
       - name: Build release APK
         run: |
-          cd $HOME/ksu/manager
+          cd "$HOME/ksu/manager"
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease \
             -PKSU_PACKAGE_NAME="$MANAGER_PACKAGE" \
@@ -130,5 +145,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: manager-apk
-          path: $HOME/ksu/manager/app/build/outputs/apk/release/*.apk
+          path: ${{ env.HOME }}/ksu/manager/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
