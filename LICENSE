@@ -1,0 +1,12 @@
+﻿K FEN SU is based on KernelSU (https://github.com/tiann/KernelSU),
+licensed under the GNU General Public License v3.0 (GPL-3.0).
+
+Modifications by FENZHI:
+- Application package name changed to com.fenzhi.ksu
+- Application name changed to "K FEN SU"
+- Application icon replaced
+- About screen amended with attribution and author information
+- Released kernel module embeds this project's signing certificate hash
+
+The full GPL-3.0 license text is available at:
+https://www.gnu.org/licenses/gpl-3.0.txt
