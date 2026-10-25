@@ -1,7 +1,9 @@
 {
-  "versionCode": 100,
-  "versionName": "1.9.2",
-  "url": "https://cdn.jsdelivr.net/gh/3456000143/kfensu-build@main/FENZHI-Tool-v1.9.1.apk",
-  "log": "1. 云更新多镜像\n2. 解压支持提权目录\n3. 应用可卸载",
+  "versionCode": 101,
+  "versionName": "1.9.3",
+  "url": "https://litter.catbox.moe/605t1m.apk",
+  "noticeTitle": "FENZHI Tool 公告",
+  "notice": "欢迎使用 FENZHI Tool！\n交流群：3456000143\n下载：fenzhi.lanzouu.com/b01giehe7e（密码 8888）\n\n感谢冬末见雪的支持！",
+  "log": "1. 启动自动检测更新\n2. 云公告弹窗\n3. 内置更新地址\n4. 自动下载并安装",
   "force": false
 }
