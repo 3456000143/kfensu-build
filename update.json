@@ -1,0 +1,8 @@
+{
+  "versionCode": 87,
+  "versionName": "1.9.1",
+  "url": "https://github.com/你的用户名/fenzhi-update/releases/download/v1.9.1/FENZHI-Tool-v1.9.1.apk",
+  "size": 9910000,
+  "log": "1. 修复解压失败\n2. 新增应用卸载\n3. 优化终端输入",
+  "force": false
+}
