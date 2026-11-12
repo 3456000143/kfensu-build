@@ -1,9 +1,11 @@
+
+
 {
   "server_url": "https://gravitate-undercoat-unleash.ngrok-free.dev",
-  "version": "1.8.0",
-  "version_code": 180,
-  "version_name": "1.8.0",
+  "version": "1.9.0",
+  "version_code": 190,
+  "version_name": "1.9.0",
   "download_url": "https://github.com/3456000143/kfensu-build/releases/latest/download/FzClub.apk",
-  "announcement": "1.8.0 更新：\n1. 买家首页分类改为动态读取，后台新增分类自动显示\n2. 私单支持走平台联系QQ 3456000143\n3. 私单抽成从押金自动扣除，可在「我的」查看押金流水\n4. 登录优先英文地址，5 秒不通自动切备用",
+  "announcement": "1.9.0 更新：\n1. 修复点击分类后跳回「全部」的问题，选中分类会保持\n2. 分类筛选动态读取商品分类\n3. 其他细节优化",
   "updated_at": "2026-11-13"
 }
